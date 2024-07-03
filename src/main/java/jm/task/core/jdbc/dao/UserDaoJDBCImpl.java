@@ -11,24 +11,20 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class UserDaoJDBCImpl implements UserDao {
+
+    private final String CREATE_TABLE = "CREATE TABLE IF NOT EXISTS " + Util.getSCHEMA() + "." + "users (\n" + "  id BIGINT(200) NOT NULL AUTO_INCREMENT,\n" + "  name VARCHAR(45) NOT NULL,\n" + "  lastName VARCHAR(45) NOT NULL,\n" + "  age TINYINT(3) NOT NULL,\n" + "  PRIMARY KEY (id))";
+    private final String DROP_TABLE = "DROP TABLE IF EXISTS " + Util.getSCHEMA() + "." + "users";
+    private final String INSERT_USERS = "INSERT INTO " + Util.getSCHEMA() + "." + "users (name, lastName, age) VALUES (?, ?, ?)";
+    private final String SELECT_ALL = "SELECT * FROM " + Util.getSCHEMA() + "." + "users";
+    private final String DELETE = "DELETE FROM " + Util.getSCHEMA() + "." + "users WHERE id = ?";
+    private final String CLEAN = "TRUNCATE TABLE " + Util.getSCHEMA() + "." + "users";
+    private final Connection connection = Util.getConnection();
+
     public UserDaoJDBCImpl() {
 
     }
 
-    private final Util util = new Util();
-    private final String CREATE_TABLE = "CREATE TABLE IF NOT EXISTS " + util.getSCHEMA() + "." + "users (\n" +
-            "  id BIGINT(200) NOT NULL AUTO_INCREMENT,\n" +
-            "  name VARCHAR(45) NOT NULL,\n" +
-            "  lastName VARCHAR(45) NOT NULL,\n" +
-            "  age TINYINT(3) NOT NULL,\n" +
-            "  PRIMARY KEY (id))";
-    private final String DROP_TABLE = "DROP TABLE IF EXISTS " + util.getSCHEMA() + "." + "users";
-    private final String INSERT_USERS = "INSERT INTO " + util.getSCHEMA() + "." + "users (name, lastName, age) VALUES (?, ?, ?)";
-    private final String SELECT_ALL = "SELECT * FROM " + util.getSCHEMA() +  "." + "users";
-    private final String DELETE = "DELETE FROM " + util.getSCHEMA() + "." + "users WHERE id = ? IS NULL";
-    private final String CLEAN = "TRUNCATE TABLE " + util.getSCHEMA() + "." + "users";
-    private final Connection connection = Util.getConnection();
-
+    @Override
     public void createUsersTable() {
         try (PreparedStatement ps = connection.prepareStatement(CREATE_TABLE);) {
             ps.executeUpdate();
@@ -37,6 +33,7 @@ public class UserDaoJDBCImpl implements UserDao {
         }
     }
 
+    @Override
     public void dropUsersTable() {
         try (PreparedStatement ps = connection.prepareStatement(DROP_TABLE);) {
             ps.executeUpdate();
@@ -45,30 +42,45 @@ public class UserDaoJDBCImpl implements UserDao {
         }
     }
 
+    @Override
     public void saveUser(String name, String lastName, byte age) {
         try (PreparedStatement ps = connection.prepareStatement(INSERT_USERS);) {
-            ps.setString(1, name);
-            ps.setString(2, lastName);
-            ps.setByte(3, age);
-            ps.executeUpdate();
+            try {
+                connection.setAutoCommit(false);
+                ps.setString(1, name);
+                ps.setString(2, lastName);
+                ps.setByte(3, age);
+                ps.executeUpdate();
+                connection.commit();
+            } catch (Exception e) {
+                connection.rollback();
+            }
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
     }
 
+    @Override
     public void removeUserById(long id) {
         try (PreparedStatement ps = connection.prepareStatement(DELETE);) {
-            ps.setLong(1, id);
-            ps.executeUpdate();
-        } catch (SQLException e) {
+            try {
+                connection.setAutoCommit(false);
+                ps.setLong(1, id);
+                ps.executeUpdate();
+                connection.commit();
+            } catch (Exception e) {
+                connection.rollback();
+            }
+        }
+        catch (SQLException e) {
             throw new RuntimeException(e);
         }
     }
 
+    @Override
     public List<User> getAllUsers() {
         List<User> users = new ArrayList<>();
-        try (PreparedStatement ps = connection.prepareStatement(SELECT_ALL);
-             ResultSet rs = ps.executeQuery();) {
+        try (PreparedStatement ps = connection.prepareStatement(SELECT_ALL); ResultSet rs = ps.executeQuery();) {
             while (rs.next()) {
                 User user = new User();
                 user.setId(rs.getLong("id"));
@@ -77,12 +89,15 @@ public class UserDaoJDBCImpl implements UserDao {
                 user.setAge(rs.getByte("age"));
                 users.add(user);
             }
+            connection.commit();
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
+        System.out.println(users);
         return users;
     }
 
+    @Override
     public void cleanUsersTable() {
         try (PreparedStatement ps = connection.prepareStatement(CLEAN);) {
             ps.executeUpdate();
